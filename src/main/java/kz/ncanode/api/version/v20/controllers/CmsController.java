@@ -2,6 +2,7 @@ package kz.ncanode.api.version.v20.controllers;
 
 import kz.gov.pki.kalkan.asn1.cms.Attribute;
 import kz.gov.pki.kalkan.asn1.knca.KNCAObjectIdentifiers;
+import kz.gov.pki.kalkan.asn1.pkcs.PKCSObjectIdentifiers;
 import kz.gov.pki.kalkan.jce.provider.cms.*;
 import kz.gov.pki.kalkan.tsp.TSPException;
 import kz.gov.pki.kalkan.tsp.TimeStampTokenInfo;
@@ -23,7 +24,6 @@ import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.security.*;
 import java.security.cert.*;
-import java.security.cert.Certificate;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -35,13 +35,12 @@ public class CmsController extends kz.ncanode.api.core.ApiController {
         CMSSignedDataGenerator signedDataGenerator = new CMSSignedDataGenerator();
         CMSProcessable cmsData = model.getDataToEncode();
         List<X509Certificate> certificates = new ArrayList<>();
-        SignerInformationStore existingSigners;
         int signerCountBefore = 0;
         int documentSizeBefore = model.data.get().length;
 
         if (model.isAlreadySigned()) {
             certificates = kalkan.getCertificatesFromCmsSignedData(model.getSignedData());
-            existingSigners = model.getSignedData().getSignerInfos();
+            SignerInformationStore existingSigners = model.getSignedData().getSignerInfos();
             signedDataGenerator.addSigners(existingSigners);
             signerCountBefore = existingSigners.size();
         }
@@ -68,13 +67,6 @@ public class CmsController extends kz.ncanode.api.core.ApiController {
 
             // Получаем сертификат
             X509Certificate cert = (X509Certificate) p12.getCertificate(alias);
-
-            try {
-                cert.checkValidity();
-            } catch (CertificateExpiredException|CertificateNotYetValidException e) {
-                throw new ApiErrorException(e.getMessage(), HttpURLConnection.HTTP_BAD_REQUEST, ApiStatus.STATUS_CERTIFICATE_INVALID);
-            }
-
             certificates.add(cert);
 
             Signature sig = Signature.getInstance(cert.getSigAlgName(), kalkan.get());
@@ -102,19 +94,13 @@ public class CmsController extends kz.ncanode.api.core.ApiController {
                     KNCAObjectIdentifiers.tsa_gostgt_policy.getId() :
                     KNCAObjectIdentifiers.tsa_gost_policy.getId();
             SignerInformationStore signerStore = signed.getSignerInfos();
-            List<SignerInformation> signers = new ArrayList<>();
+            List<SignerInformation> signers = new ArrayList<SignerInformation>();
 
             int i = 0;
 
-            for (Object signer : signerStore.getSigners()) {
-
+            for (SignerInformation signer : (Collection<SignerInformation>) signerStore.getSigners()) {
                 X509Certificate cert = certificates.get(i++);
-
-                try {
-                    signers.add(getApiServiceProvider().tsp.addTspToSigner((SignerInformation) signer, cert, useTsaPolicy));
-                } catch (IOException e) {
-                    throw new ApiErrorException("Не удалось добавить метку TSP: " + e.getMessage());
-                }
+                signers.add(getApiServiceProvider().tsp.addTspToSigner(signer, cert, useTsaPolicy));
             }
 
             signed = CMSSignedData.replaceSigners(signed, new SignerInformationStore(signers));
@@ -133,7 +119,7 @@ public class CmsController extends kz.ncanode.api.core.ApiController {
 
     @ApiMethod(url = "verify")
     public void verify(CmsVerifyModel model, JSONObject response) throws Exception {
-        if (model.checkCrl.get() && getApiServiceProvider().crl.isDisable()) {
+        if (model.checkCrl.get() && !getApiServiceProvider().crl.isEnabled()) {
             response.put("status", ApiStatus.STATUS_INVALID_PARAMETER);
             response.put("httpCode", HttpURLConnection.HTTP_BAD_REQUEST);
             response.put(
@@ -150,9 +136,9 @@ public class CmsController extends kz.ncanode.api.core.ApiController {
         String providerName = getApiServiceProvider().kalkan.get().getName();
         CertStore clientCerts = cms.getCertificatesAndCRLs("Collection", providerName);
 
-        Map<String, Object> resp = new HashMap<>();
+        JSONObject resp = new JSONObject();
 
-        Iterator<?> sit = signers.getSigners().iterator();
+        Iterator sit = signers.getSigners().iterator();
 
         boolean signInfo = false;
 
@@ -167,8 +153,8 @@ public class CmsController extends kz.ncanode.api.core.ApiController {
 
             SignerInformation signer = (SignerInformation) sit.next();
             X509CertSelector signerConstraints = signer.getSID();
-            Collection<? extends Certificate> certCollection = clientCerts.getCertificates(signerConstraints);
-            Iterator<? extends Certificate> certIt = certCollection.iterator();
+            Collection certCollection = clientCerts.getCertificates(signerConstraints);
+            Iterator certIt = certCollection.iterator();
 
             boolean certCheck = false;
             List<String> certSerialNumbers = new ArrayList<>();
@@ -176,13 +162,21 @@ public class CmsController extends kz.ncanode.api.core.ApiController {
             while (certIt.hasNext()) {
                 certCheck = true;
                 X509Certificate cert = (X509Certificate) certIt.next();
-
-                try {
-                    cert.checkValidity();
-                } catch (CertificateExpiredException|CertificateNotYetValidException e) {
-                    throw new ApiErrorException(e.getMessage(), HttpURLConnection.HTTP_BAD_REQUEST, ApiStatus.STATUS_CERTIFICATE_INVALID);
+                if (model.checkValidity.get()) {
+                
+                	
+                try {	
+                cert.checkValidity();
+                	}
+                catch (Exception e)
+                {
+                	throw new ApiErrorException(
+                            "Certificate validaty error. The document signature is probably invalid."+e.getMessage(),
+                            HttpURLConnection.HTTP_BAD_REQUEST
+                    );
                 }
-
+                
+                }
                 certs.add(cert);
                 certsSignValid.add(signer.verify(cert.getPublicKey(), providerName));
                 certSerialNumbers.add(String.valueOf(cert.getSerialNumber()));
@@ -191,59 +185,75 @@ public class CmsController extends kz.ncanode.api.core.ApiController {
             if (!certCheck) {
                 throw new ApiErrorException(
                         "Certificate not found. The document signature is probably invalid.",
-                        HttpURLConnection.HTTP_BAD_REQUEST,
-                        ApiStatus.STATUS_CERTIFICATE_INVALID
+                        HttpURLConnection.HTTP_BAD_REQUEST
                 );
             }
 
             // Tsp verification
-            Vector<Attribute> tspAttrs = getApiServiceProvider().tsp.getSignerTspAttributes(signer);
+            if (signer.getUnsignedAttributes() != null) {
+                Hashtable attrs = signer.getUnsignedAttributes().toHashtable();
 
-            for (Attribute attr : tspAttrs) {
-                if (attr.getAttrValues().size() != 1) {
-                    throw new Exception("Too many TSP tokens");
+                if (attrs.containsKey(PKCSObjectIdentifiers.id_aa_signatureTimeStampToken)) {
+                    Vector<Attribute> tspAttrs = new Vector<>();
+
+                    // в подписи может быть один или несколько tsp атрибутов
+                    Object attrOrAttrs = attrs.get(PKCSObjectIdentifiers.id_aa_signatureTimeStampToken);
+
+                    if (attrOrAttrs instanceof Attribute) {
+                        tspAttrs.add((Attribute) attrOrAttrs);
+                    } else {
+                        tspAttrs = (Vector<Attribute>) attrOrAttrs;
+                    }
+
+                    for (Attribute attr : tspAttrs) {
+                        if (attr.getAttrValues().size() != 1) {
+                            throw new Exception("Too many TSP tokens");
+                        }
+
+                        CMSSignedData tspCms = new CMSSignedData(attr.getAttrValues().getObjectAt(0).getDERObject().getEncoded());
+                        TimeStampTokenInfo tspi = getApiServiceProvider().tsp.verifyTSP(tspCms);
+
+                        JSONObject tspout = new JSONObject();
+
+                        tspout.put("serialNumber", new String(Hex.encode(tspi.getSerialNumber().toByteArray())));
+                        tspout.put("genTime", Helper.dateTime(tspi.getGenTime()));
+                        tspout.put("policy", tspi.getPolicy());
+                        tspout.put("tsa", tspi.getTsa());
+                        tspout.put("tspHashAlgorithm", Helper.getHashingAlgorithmByOID(tspi.getMessageImprintAlgOID()));
+                        tspout.put("hash", new String(Hex.encode(tspi.getMessageImprintDigest())));
+
+                        for (String certSerialNumber : certSerialNumbers) {
+                            ArrayList<JSONObject> tspsWithCerialNumber = certSerialNumbersToTsps.getOrDefault(certSerialNumber, new ArrayList<>());
+                            tspsWithCerialNumber.add(tspout);
+                            certSerialNumbersToTsps.put(certSerialNumber, tspsWithCerialNumber);
+                        }
+
+                        tspinf.add(tspout);
+                    }
                 }
-
-                CMSSignedData tspCms = new CMSSignedData(attr.getAttrValues().getObjectAt(0).getDERObject().getEncoded());
-                TimeStampTokenInfo tspi = getApiServiceProvider().tsp.verifyTSP(tspCms);
-
-                JSONObject tspout = new JSONObject();
-
-                tspout.put("serialNumber", new String(Hex.encode(tspi.getSerialNumber().toByteArray())));
-                tspout.put("genTime", Helper.dateTime(tspi.getGenTime()));
-                tspout.put("policy", tspi.getPolicy());
-                tspout.put("tsa", tspi.getTsa());
-                tspout.put("tspHashAlgorithm", Helper.getHashingAlgorithmByOID(tspi.getMessageImprintAlgOID()));
-                tspout.put("hash", new String(Hex.encode(tspi.getMessageImprintDigest())));
-
-                for (String certSerialNumber : certSerialNumbers) {
-                    ArrayList<JSONObject> tspsWithCerialNumber = certSerialNumbersToTsps.getOrDefault(certSerialNumber, new ArrayList<>());
-                    tspsWithCerialNumber.add(tspout);
-                    certSerialNumbersToTsps.put(certSerialNumber, tspsWithCerialNumber);
-                }
-
-                tspinf.add(tspout);
             }
         }
 
         JSONArray certsList = new JSONArray();
 
-        for (X509Certificate cert : certs) {
+        for (int i = 0; i < certs.size(); ++i) {
+            X509Certificate cert = certs.get(i);
+
             // Chain information
-            ArrayList<X509Certificate> chain;
-            ArrayList<JSONObject> chainInf;
+            ArrayList<java.security.cert.X509Certificate> chain = null;
+            ArrayList<JSONObject> chainInf = null;
             chain = getApiServiceProvider().ca.chain(cert);
 
             chainInf = new ArrayList<>();
 
             if (chain != null) {
-                for (X509Certificate chainCert : chain) {
+                for (java.security.cert.X509Certificate chainCert : chain) {
                     JSONObject chi = getApiServiceProvider().pki.certInfo(chainCert, false, false, null);
                     chainInf.add(chi);
                 }
             }
 
-            X509Certificate issuerCert = null;
+            java.security.cert.X509Certificate issuerCert = null;
 
             if (chain != null && chain.size() > 1) {
                 issuerCert = chain.get(1);
@@ -252,18 +262,17 @@ public class CmsController extends kz.ncanode.api.core.ApiController {
             if (issuerCert == null) {
                 throw new ApiErrorException(
                         "Cannot find certificate issuer. The document signature is probably invalid.",
-                        HttpURLConnection.HTTP_BAD_REQUEST,
-                        ApiStatus.STATUS_CERTIFICATE_INVALID
+                        HttpURLConnection.HTTP_BAD_REQUEST
                 );
             }
 
             try {
-                Map<String, Object> certInf2 = new HashMap<>();
+                JSONObject certInf2 = new JSONObject();
                 JSONObject certInf = getApiServiceProvider().pki.certInfo(cert, model.checkOcsp.get(), model.checkCrl.get(), issuerCert);
                 certInf2.put("chain", chainInf);
                 certInf2.put("cert", certInf);
                 certInf2.put("tsps", certSerialNumbersToTsps.getOrDefault(String.valueOf(cert.getSerialNumber()), new ArrayList<>()));
-                certsList.add(new JSONObject(certInf2));
+                certsList.add(certInf2);
             } catch (Exception e) {
                 throw new ApiErrorException(e.getMessage());
             }
@@ -272,20 +281,19 @@ public class CmsController extends kz.ncanode.api.core.ApiController {
         if (!signInfo) {
             throw new ApiErrorException(
                     "Signer information not found. The document signature is probably invalid.",
-                    HttpURLConnection.HTTP_BAD_REQUEST,
-                    ApiStatus.STATUS_CERTIFICATE_INVALID
+                    HttpURLConnection.HTTP_BAD_REQUEST
             );
         }
 
         resp.put("signers", certsList);
         resp.put("tsp", tspinf);
-        response.put("result", new JSONObject(resp));
+        response.put("result", resp);
         response.put("status", ApiStatus.STATUS_OK);
         response.put("message", "");
     }
 
     @ApiMethod(url = "extract")
-    public void extract(CmsExtractModel model, JSONObject response) throws IOException, CMSException {
+    public void extract(CmsExtractModel model, JSONObject response) throws ApiErrorException, IOException, CMSException {
         CMSSignedData cms = model.cms.get();
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         cms.getSignedContent().write(out);

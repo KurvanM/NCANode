@@ -9,9 +9,11 @@ public class VerifyCrlArgument extends ApiArgument {
 
     ApiVersion ver;
     ApiServiceProvider man;
+    private boolean required = false;
     private boolean verifyCrl = false;
 
-    public VerifyCrlArgument(ApiVersion ver, ApiServiceProvider man) {
+    public VerifyCrlArgument(boolean required, ApiVersion ver, ApiServiceProvider man) {
+        this.required = required;
         this.ver = ver;
         this.man = man;
     }

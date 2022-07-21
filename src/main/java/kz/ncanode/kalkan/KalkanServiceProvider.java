@@ -24,16 +24,18 @@ import java.util.List;
  * Обёртка для загрузки провайдера Kalkan
  */
 public class KalkanServiceProvider implements ServiceProvider {
-    private final KalkanProvider provider;
+    private KalkanProvider provider = null;
+    private OutLogServiceProvider out = null;
 
     public KalkanServiceProvider(OutLogServiceProvider out) {
+        this.out = out;
 
-        out.write("Initializing Kalkan crypto...");
+        this.out.write("Initializing Kalkan crypto...");
         provider = new KalkanProvider();
         Security.addProvider(provider);
         BasicConfigurator.configure(new NullAppender());
         KncaXS.loadXMLSecurity();
-        out.write("Kalkan crypto initialized. Version: " + getVersion());
+        this.out.write("Kalkan crypto initialized. Version: " + getVersion());
     }
 
     public String getVersion() {

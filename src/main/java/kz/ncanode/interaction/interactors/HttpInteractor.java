@@ -17,11 +17,9 @@ import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
-import java.util.Map;
 
 public class HttpInteractor implements Interactor {
-    InteractionServiceProvider provider;
+    InteractionServiceProvider provider = null;
 
     public HttpInteractor(InteractionServiceProvider provider) {
         this.provider = provider;
@@ -30,7 +28,7 @@ public class HttpInteractor implements Interactor {
     @Override
     public void interact() {
         String ip = provider.config.get("http", "ip");
-        int port = Integer.parseInt(provider.config.get("http", "port"));
+        int port = Integer.valueOf(provider.config.get("http", "port"));
 
         provider.out.write("Starting HTTP server on " + ip + ":" + port + "...");
 
@@ -75,7 +73,7 @@ public class HttpInteractor implements Interactor {
                 resp.close();
             } else {
                 // handle request
-                String response;
+                String response = "";
                 headers.add("Content-Type", "application/json; charset=UTF-8");
 
                 String contentTypeHeader = exchange.getRequestHeaders().getFirst("Content-Type");
@@ -85,9 +83,9 @@ public class HttpInteractor implements Interactor {
                 } else {
                     // read request body
                     StringBuilder stringBuilder = new StringBuilder();
-                    String line;
+                    String line = null;
 
-                    try (BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(req, StandardCharsets.UTF_8))) {
+                    try (BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(req, "UTF-8"))) {
                         while ((line = bufferedReader.readLine()) != null) {
                             stringBuilder.append(line);
                         }
@@ -102,16 +100,16 @@ public class HttpInteractor implements Interactor {
                         responseCode = (int) responseJson.getOrDefault("httpCode", responseCode);
                         response = responseJson.toJSONString();
                     } catch (ParseException e) {
-                        Map<String, Object> re = new HashMap<>();
+                        JSONObject re = new JSONObject();
                         re.put("status", ApiStatus.STATUS_REQUEST_PARSE_ERROR);
                         re.put("message", "JSON parsing error");
-                        response = (new JSONObject(re)).toJSONString();
+                        response = re.toJSONString();
                         responseCode = HttpURLConnection.HTTP_BAD_REQUEST;
                     } catch (Exception e) {
-                        Map<String, Object> re = new HashMap<>();
+                        JSONObject re = new JSONObject();
                         re.put("status", ApiStatus.STATUS_API_ERROR);
                         re.put("message", e.getMessage());
-                        response = (new JSONObject(re)).toJSONString();
+                        response = re.toJSONString();
                         responseCode = HttpURLConnection.HTTP_INTERNAL_ERROR;
                     }
                 }

@@ -11,7 +11,7 @@ import org.json.simple.JSONObject;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
+import java.io.UnsupportedEncodingException;
 import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -20,7 +20,6 @@ import java.text.NumberFormat;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.Map;
 
 /**
  * Класс-хелпер. Здесь лежат всякие методы, которые понадобились для работы других модулей
@@ -55,10 +54,14 @@ public class Helper {
         {
             MessageDigest crypt = MessageDigest.getInstance("SHA-1");
             crypt.reset();
-            crypt.update(data.getBytes(StandardCharsets.UTF_8));
+            crypt.update(data.getBytes("UTF-8"));
             sha1 = bytesToHex(crypt.digest());
         }
         catch(NoSuchAlgorithmException e)
+        {
+            e.printStackTrace();
+        }
+        catch(UnsupportedEncodingException e)
         {
             e.printStackTrace();
         }
@@ -104,7 +107,7 @@ public class Helper {
      */
     public static String[] getSignMethodByOID(String oid) {
 
-        String[] ret = new String[2];
+        String ret[] = new String[2];
 
 
         if (oid.equals(PKCSObjectIdentifiers.sha1WithRSAEncryption.getId())) {
@@ -124,8 +127,8 @@ public class Helper {
     /**
      * Возвращает алгоритм хэширования по алгоритму подписи
      *
-     * @param signOid sign OID
-     * @return digest algorithm OID
+     * @param signOid
+     * @return
      */
     public static String getDigestAlgorithmOidBYSignAlgorithmOid(String signOid) {
         if (signOid.equals(PKCSObjectIdentifiers.sha1WithRSAEncryption.getId())) {
@@ -156,9 +159,14 @@ public class Helper {
     }
 
     public static DERObject byteToASN1(byte[] data) throws IOException {
-        try (ASN1InputStream in = new ASN1InputStream(data))
+        ASN1InputStream in = new ASN1InputStream(data);
+        try
         {
             return in.readObject();
+        }
+        finally
+        {
+            in.close();
         }
     }
 
@@ -173,21 +181,21 @@ public class Helper {
         long maxMemory = runtime.maxMemory();
         long allocatedMemory = runtime.totalMemory();
         long freeMemory = runtime.freeMemory();
-        long mb = 1024L * 1024L;
+        long mb = 1024 * 1024;
         String suffix = "MB";
 
-        Map<String, Object> result = new HashMap<>();
+        JSONObject result = new JSONObject();
         result.put("free", format.format(freeMemory / mb) + suffix);
         result.put("allocated", format.format(allocatedMemory / mb) + suffix);
         result.put("max", format.format(maxMemory / mb) + suffix);
         result.put("totalFree", format.format((freeMemory + (maxMemory - allocatedMemory)) / mb) + suffix);
 
-        return new JSONObject(result);
+        return result;
     }
 
     /**
      * Крутой баннер прям как в кряках)))
-     * @return banner text
+     * @return
      */
     public static String awesomeBanner()
     {

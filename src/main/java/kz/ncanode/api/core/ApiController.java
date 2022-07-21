@@ -1,5 +1,6 @@
 package kz.ncanode.api.core;
 
+import kz.ncanode.api.ApiServiceProvider;
 import kz.ncanode.api.core.annotations.ApiMethod;
 import kz.ncanode.api.exceptions.ApiErrorException;
 import kz.ncanode.api.exceptions.InvalidArgumentException;
@@ -37,21 +38,15 @@ public abstract class ApiController extends ApiDependencies {
                 try {
                     invokeMethod(m, request, response);
                 } catch (InvalidArgumentException e) {
-                    throw new ApiErrorException(e.getMessage(), HttpURLConnection.HTTP_BAD_REQUEST, ApiStatus.STATUS_INVALID_PARAMETER);
+                    throw new ApiErrorException(e.getMessage(), HttpURLConnection.HTTP_BAD_REQUEST);
                 } catch (Exception e) {
+                    // TODO заменить printStackTrace на нормальное логирование в json
+                    e.printStackTrace();
                     Throwable cause = e.getCause();
 
                     if (cause instanceof ApiErrorException) {
-                        getApiServiceProvider().err.write(String.format(
-                                "Error while executing method '%s': %s",
-                                methodName,
-                                cause.getMessage()
-                        ));
-
                         throw ((ApiErrorException) cause);
                     } else {
-                        e.printStackTrace();
-
                         throw new ApiErrorException(e.getMessage());
                     }
                 }

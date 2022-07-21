@@ -10,7 +10,7 @@ import java.util.Base64;
 
 public class P12ApiArgument extends ApiArgument {
 
-    private final boolean required;
+    private boolean required = false;
     private KeyStore key = null;
     private String password = "";
 

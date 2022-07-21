@@ -8,6 +8,7 @@ import kz.ncanode.log.OutLogServiceProvider;
 import kz.ncanode.pki.exceptions.RootCertificatesNotFoundException;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
@@ -25,20 +26,22 @@ import java.util.ArrayList;
 public class CAStoreServiceProvider implements ServiceProvider {
     public final static String CERT_FILE_EXT = ".crt";
 
-    private final ArrayList<X509Certificate> root = new ArrayList<>();
-    private final ArrayList<X509Certificate> trusted = new ArrayList<>();
+    private ArrayList<X509Certificate> root = new ArrayList<>();
+    private ArrayList<X509Certificate> trusted = new ArrayList<>();
 
-    private final OutLogServiceProvider   out;
-    private final ErrorLogServiceProvider err;
+    private ConfigServiceProvider   config = null;
+    private OutLogServiceProvider   out    = null;
+    private ErrorLogServiceProvider err    = null;
 
     public CAStoreServiceProvider(ConfigServiceProvider config, OutLogServiceProvider out, ErrorLogServiceProvider err) {
+        this.config = config;
         this.out    = out;
         this.err    = err;
 
         String rootCaDir    = Helper.absolutePath(config.get("ca", "root_dir"));
         String trustedCaDir = Helper.absolutePath(config.get("ca", "trusted_dir"));
 
-        int count;
+        int count = 0;
 
         // Load root certificates
         this.out.write("Loading root certificates from: " + rootCaDir);
@@ -73,7 +76,13 @@ public class CAStoreServiceProvider implements ServiceProvider {
                 X509Certificate x509 = X509Manager.load(p);
                 ++counter;
                 store.add(x509);
-            } catch (CertificateException | NoSuchProviderException | IOException e) {
+            } catch (CertificateException e) {
+                err.write("Cannot open load certificate: " + p + ". Exception: " + e.getMessage());
+            } catch (NoSuchProviderException e) {
+                err.write("Cannot open load certificate: " + p + ". Exception: " + e.getMessage());
+            } catch (FileNotFoundException e) {
+                err.write("Cannot open load certificate: " + p + ". Exception: " + e.getMessage());
+            } catch (IOException e) {
                 err.write("Cannot open load certificate: " + p + ". Exception: " + e.getMessage());
             }
         }
@@ -92,7 +101,7 @@ public class CAStoreServiceProvider implements ServiceProvider {
         result.add(cert);
 
         // Проверяем все доверенные (промежуточные) сертификаты
-        X509Certificate c;
+        X509Certificate c = null;
 
         while ((c = chainTrusted(result.get(result.size() - 1))) != null) {
             if (!result.contains(c)) {

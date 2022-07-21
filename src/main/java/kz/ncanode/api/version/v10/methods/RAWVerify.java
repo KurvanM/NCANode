@@ -16,13 +16,22 @@ import kz.ncanode.api.exceptions.ApiErrorException;
 import kz.ncanode.api.version.v10.arguments.CmsArgument;
 import kz.ncanode.api.version.v10.arguments.VerifyCrlArgument;
 import kz.ncanode.api.version.v10.arguments.VerifyOcspArgument;
+import kz.ncanode.api.version.v10.arguments.VerifyValidatyArgument;
+import kz.ncanode.api.version.v10.arguments.UseTsaPolicyArgument;
+import kz.ncanode.api.version.v10.arguments.CreateTspArgument;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 
+import java.net.HttpURLConnection;
 import java.security.cert.CertStore;
 import java.security.cert.X509CertSelector;
 import java.security.cert.X509Certificate;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.Collection;
+import java.util.Hashtable;
+import java.util.Iterator;
+import java.util.List;
 
 public class RAWVerify extends ApiMethod {
     public RAWVerify(ApiVersion ver, ApiServiceProvider man) {
@@ -45,9 +54,9 @@ public class RAWVerify extends ApiMethod {
         String providerName = man.kalkan.get().getName();
         CertStore clientCerts = cms.getCertificatesAndCRLs("Collection", providerName);
 
-        Map<String, Object> resp = new HashMap<>();
+        JSONObject resp = new JSONObject();
 
-        Iterator<?> sit = signers.getSigners().iterator();
+        Iterator sit = signers.getSigners().iterator();
 
         X509Certificate cert = null;
 
@@ -60,15 +69,27 @@ public class RAWVerify extends ApiMethod {
 
             SignerInformation signer = (SignerInformation) sit.next();
             X509CertSelector signerConstraints = signer.getSID();
-            Collection<?> certCollection = clientCerts.getCertificates(signerConstraints);
-            Iterator<?> certIt = certCollection.iterator();
+            Collection certCollection = clientCerts.getCertificates(signerConstraints);
+            Iterator certIt = certCollection.iterator();
 
             boolean certCheck = false;
 
             while (certIt.hasNext()) {
                 certCheck = true;
                 cert = (X509Certificate) certIt.next();
+                
+                if ((Boolean) args.get(3).get()) {
+                	
+                try {	
                 cert.checkValidity();
+                }
+                catch (Exception e)
+                {
+                	throw new Exception(
+                            "Certificate validaty error. The document signature is probably invalid."+e.getMessage()   );
+                }
+                
+                }
                 if (!signer.verify(cert.getPublicKey(), providerName)) {
                     isSignatureValid = false;
                 }
@@ -77,10 +98,26 @@ public class RAWVerify extends ApiMethod {
             if (!certCheck) {
                 throw new Exception("Certificate not found");
             }
+            // Tsp verification set
+            if ((Boolean) args.get(5).get()) {
+            	String useTsaPolicy     =(String)args.get(4).get();
+                SignerInformationStore signerStore = cms.getSignerInfos();
 
+                List<SignerInformation> newSigners = new ArrayList<SignerInformation>();
+
+                for (SignerInformation signer_tsp : (Collection<SignerInformation>)signerStore.getSigners())
+                {
+                    newSigners.add(man.tsp.addTspToSigner(signer_tsp, cert, useTsaPolicy));
+                }
+
+                cms = CMSSignedData.replaceSigners(cms, new SignerInformationStore(newSigners));
+            
+                resp.put("tsp_cms", new String(Base64.getEncoder().encode(cms.getEncoded())));
+
+            }
             // Tsp verification
             if (signer.getUnsignedAttributes() != null) {
-                Hashtable<?,?> attrs = signer.getUnsignedAttributes().toHashtable();
+                Hashtable attrs = signer.getUnsignedAttributes().toHashtable();
 
                 if (attrs.containsKey(PKCSObjectIdentifiers.id_aa_signatureTimeStampToken)) {
                     Attribute attr = (Attribute) attrs.get(PKCSObjectIdentifiers.id_aa_signatureTimeStampToken);
@@ -93,7 +130,7 @@ public class RAWVerify extends ApiMethod {
                     CMSSignedData tspCms = new CMSSignedData(attr.getAttrValues().getObjectAt(0).getDERObject().getEncoded());
                     TimeStampTokenInfo tspi = man.tsp.verifyTSP(tspCms);
 
-                    Map<String, Object> tspout = new HashMap<>();
+                    JSONObject tspout = new JSONObject();
 
                     tspout.put("serialNumber", new String(Hex.encode(tspi.getSerialNumber().toByteArray())));
                     tspout.put("genTime", Helper.dateTime(tspi.getGenTime()));
@@ -114,8 +151,8 @@ public class RAWVerify extends ApiMethod {
         }
 
         // Chain information
-        ArrayList<java.security.cert.X509Certificate> chain;
-        ArrayList<JSONObject> chainInf;
+        ArrayList<java.security.cert.X509Certificate> chain = null;
+        ArrayList<JSONObject> chainInf = null;
         chain = man.ca.chain(cert);
 
         chainInf = new ArrayList<>();
@@ -146,15 +183,18 @@ public class RAWVerify extends ApiMethod {
             throw new ApiErrorException(e.getMessage());
         }
 
-        return new JSONObject(resp);
+        return resp;
     }
 
     @Override
     public ArrayList<ApiArgument> arguments() {
         ArrayList<ApiArgument> args = new ArrayList<>();
         args.add(new CmsArgument(true, ver, man));
-        args.add(new VerifyOcspArgument(ver, man));
-        args.add(new VerifyCrlArgument(ver, man));
+        args.add(new VerifyOcspArgument(false, ver, man));
+        args.add(new VerifyCrlArgument(false, ver, man));
+        args.add(new VerifyValidatyArgument(true, ver, man));
+        args.add(new UseTsaPolicyArgument(false, ver, man));
+        args.add(new CreateTspArgument(true, ver, man));
         return args;
     }
 }

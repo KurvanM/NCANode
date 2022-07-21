@@ -5,4 +5,7 @@ public class RootCertificatesNotFoundException extends Exception {
         super(message);
     }
 
+    public RootCertificatesNotFoundException() {
+        super();
+    }
 }

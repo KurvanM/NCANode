@@ -11,9 +11,9 @@ import java.util.ArrayList;
 public class UseTsaPolicyArgument extends ApiArgument {
     ApiVersion ver;
     ApiServiceProvider man;
-    private final boolean required;
+    private boolean required = false;
     private String useTsaPolicy = "TSA_GOST_POLICY";
-    private final ArrayList<String> tsaPolicies;
+    private ArrayList<String> tsaPolicies = null;
 
     public UseTsaPolicyArgument(boolean required, ApiVersion ver, ApiServiceProvider man) {
         this.required = required;
@@ -38,12 +38,12 @@ public class UseTsaPolicyArgument extends ApiArgument {
         String useTsa = (String)params.get("useTsaPolicy");
 
         if (useTsa != null) {
-            if (!tsaPolicies.contains(useTsa)) {
+            if (tsaPolicies.indexOf(useTsa) == -1) {
                 throw new InvalidArgumentException("Invalid parameter useTsaPolicy");
             } else {
                 useTsaPolicy = useTsa;
             }
-        } else if (required) {
+        } else if (useTsa == null && required) {
             throw new InvalidArgumentException("Argument 'useTsaPolicy' is required");
         }
     }

@@ -13,9 +13,16 @@
 
 FROM maven:3.6.0-jdk-11-slim
 WORKDIR /usr/local/src/NCANode
+RUN apt-get update
+RUN apt-get install -y  gnupg dirmngr
+RUN gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 0E98404D386FA1D9 648ACFD622F3D138
+RUN gpg --armor --export 0E98404D386FA1D9 | apt-key add -
+RUN gpg --armor --export 648ACFD622F3D138 | apt-key add -
 RUN apt update && apt install -y crudini
 COPY src src/
 COPY lib lib/
+COPY lib /lib/
+
 COPY pom.xml ./
 RUN mvn clean && mvn package
 COPY NCANode.ini ./
@@ -26,8 +33,16 @@ WORKDIR /opt/ncanode
 CMD ["java", "-jar", "ncanode.jar"]
 RUN mkdir logs \
  && ln -s /dev/stdout logs/request.log \
- && ln -s /dev/stderr logs/error.log
+ && ln -s /dev/stderr logs/error.log \
+ && mkdir -p ca/root \
+ && cd ca/root && wget \
+    http://www.pki.gov.kz/cert/root_rsa.crt \
+    http://www.pki.gov.kz/cert/root_gost.crt
 
-COPY ca ca/
+RUN cd /opt/ncanode && mkdir -p ca/trusted && cd ca/trusted && wget \
+    http://www.pki.gov.kz/cert/pki_rsa.crt \
+    http://www.pki.gov.kz/cert/pki_gost.crt \
+    http://www.pki.gov.kz/cert/nca_rsa.crt \
+    http://www.pki.gov.kz/cert/nca_gost.crt
 COPY --from=0 /usr/local/src/NCANode/NCANode.ini ./NCANode.ini
-COPY --from=0 /usr/local/src/NCANode/target/ncanode-jar-with-dependencies.jar ./ncanode.jar
+COPY --from=0 /usr/local/src/NCANode/target/ncanode-*-jar-with-dependencies.jar ./ncanode.jar

@@ -14,10 +14,9 @@ import java.security.cert.X509Certificate;
  */
 public class X509Manager {
     public static X509Certificate load(String file) throws CertificateException, NoSuchProviderException, IOException {
-        X509Certificate cert;
-        try(FileInputStream stream = new FileInputStream(file)) {
-            cert = (X509Certificate)java.security.cert.CertificateFactory.getInstance("X.509", KalkanProvider.PROVIDER_NAME).generateCertificate(stream);
-        }
+        FileInputStream stream = new FileInputStream(file);
+        X509Certificate cert = (X509Certificate)java.security.cert.CertificateFactory.getInstance("X.509", KalkanProvider.PROVIDER_NAME).generateCertificate(stream);
+        stream.close();
         return cert;
     }
 

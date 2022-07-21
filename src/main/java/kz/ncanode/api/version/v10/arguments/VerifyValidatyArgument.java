@@ -5,15 +5,14 @@ import kz.ncanode.api.core.ApiArgument;
 import kz.ncanode.api.core.ApiVersion;
 import kz.ncanode.api.exceptions.InvalidArgumentException;
 
-public class TspInCmsArgument extends ApiArgument {
-
-
+public class VerifyValidatyArgument extends ApiArgument  {
+	
     ApiVersion ver;
     ApiServiceProvider man;
     private boolean required = false;
-    private boolean tspInCms = false;
+    private boolean checkValidity = false;
 
-    public TspInCmsArgument(boolean required, ApiVersion ver, ApiServiceProvider man) {
+    public VerifyValidatyArgument(boolean required, ApiVersion ver, ApiServiceProvider man) {
         this.required = required;
         this.ver = ver;
         this.man = man;
@@ -22,11 +21,13 @@ public class TspInCmsArgument extends ApiArgument {
     @Override
     public void validate() throws InvalidArgumentException {
         try {
-            if (params.get("tspInCms") == null && required) {
-                throw new InvalidArgumentException("Argument 'tspInCms' is required");
-            }
-
-            tspInCms = (boolean)(params.get("tspInCms") == null ? false : params.get("tspInCms"));
+        	
+        	if ((boolean)(params.get("checkValidity") == null)) {
+        	//checkValidity = (boolean)(params.get("verifyCrl") == null ? false : params.get("verifyCrl"));
+        		throw new InvalidArgumentException("Argument 'checkValidity' is required: true or false");
+        	}
+        	
+        	checkValidity = (boolean)(params.get("checkValidity"));
         } catch (ClassCastException e) {
             //
         }
@@ -34,11 +35,12 @@ public class TspInCmsArgument extends ApiArgument {
 
     @Override
     public Object get() {
-        return tspInCms;
+        return checkValidity;
     }
 
     @Override
     public String name() {
-        return "tspInCms";
+        return "checkValidity";
     }
+
 }

@@ -15,9 +15,11 @@ public class XmlArgument extends ApiArgument {
 
     ApiVersion ver;
     ApiServiceProvider man;
+    private boolean required = false;
     private Document xml = null;
 
-    public XmlArgument(ApiVersion ver, ApiServiceProvider man) {
+    public XmlArgument(boolean required, ApiVersion ver, ApiServiceProvider man) {
+        this.required = required;
         this.ver = ver;
         this.man = man;
     }

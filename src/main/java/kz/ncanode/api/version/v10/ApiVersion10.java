@@ -11,9 +11,7 @@ import kz.ncanode.api.version.v10.methods.*;
 import org.json.simple.JSONObject;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.Hashtable;
-import java.util.Map;
 
 /**
  * Версия API 1.0
@@ -22,10 +20,13 @@ import java.util.Map;
  */
 public class ApiVersion10 implements ApiVersion {
 
-    private final Hashtable<String, ApiMethod> methods;
+    private ApiServiceProvider man = null;
+
+    private Hashtable<String, ApiMethod> methods = null;
 
     public ApiVersion10(ApiServiceProvider man) {
         methods = new Hashtable<>();
+        this.man = man;
 
         // PKCS12
         methods.put("PKCS12.info", new PKCS12Info(this, man));
@@ -52,8 +53,14 @@ public class ApiVersion10 implements ApiVersion {
 
     }
 
+    public ApiVersion10() {
+        methods = new Hashtable<>();
+        this.man = man;
+    }
+
     @Override
     public void setApiManager(ApiServiceProvider apiManager) {
+        man = apiManager;
     }
 
     /**
@@ -71,29 +78,29 @@ public class ApiVersion10 implements ApiVersion {
         // catch ApiError exception
         // process result
 
-        String method;
+        String method = "";
 
         try {
             method = (String)request.get("method");
         } catch (ClassCastException e) {
-            Map<String, Object> resp = new HashMap<>();
+            JSONObject resp = new JSONObject();
             resp.put("status", ApiStatus.STATUS_INVALID_PARAMETER);
             resp.put("message", "Invalid parameter \"method\"");
-            return new JSONObject(resp);
+            return resp;
         }
 
         if (method == null || method.isEmpty()) {
-            Map<String, Object> resp = new HashMap<>();
+            JSONObject resp = new JSONObject();
             resp.put("status", ApiStatus.STATUS_METHOD_NOT_SPECIFIED);
             resp.put("message", "\"method\" not specified");
-            return new JSONObject(resp);
+            return resp;
         }
 
         if (!methods.containsKey(method)) {
-            Map<String, Object> resp = new HashMap<>();
+            JSONObject resp = new JSONObject();
             resp.put("status", ApiStatus.STATUS_METHOD_NOT_FOUND);
             resp.put("message", "Method not found");
-            return new JSONObject(resp);
+            return resp;
         }
 
         JSONObject params;
@@ -101,10 +108,10 @@ public class ApiVersion10 implements ApiVersion {
         try {
             params = (JSONObject)request.get("params");
         } catch (ClassCastException e) {
-            Map<String, Object> resp = new HashMap<>();
+            JSONObject resp = new JSONObject();
             resp.put("status", ApiStatus.STATUS_INVALID_PARAMETER);
             resp.put("message", "Invalid parameter \"params\"");
-            return new JSONObject(resp);
+            return resp;
         }
 
         ApiMethod m = methods.get(method);
@@ -116,10 +123,10 @@ public class ApiVersion10 implements ApiVersion {
         if (args != null && args.size() > 0) {
 
             if (params == null) {
-                Map<String, Object> resp = new HashMap<>();
+                JSONObject resp = new JSONObject();
                 resp.put("status", ApiStatus.STATUS_PARAMS_NOT_FOUND);
                 resp.put("message", "\"params\" not found in request");
-                return new JSONObject(resp);
+                return resp;
             }
 
             for (ApiArgument arg : args) {
@@ -127,10 +134,10 @@ public class ApiVersion10 implements ApiVersion {
                     arg.params = params;
                     arg.validate();
                 } catch (InvalidArgumentException e) {
-                    Map<String, Object> resp = new HashMap<>();
+                    JSONObject resp = new JSONObject();
                     resp.put("status", ApiStatus.STATUS_INVALID_PARAMETER);
                     resp.put("message", "Invalid parameter \"" + arg.name() + "\". Error: " + e.getMessage());
-                    return new JSONObject(resp);
+                    return resp;
                 }
             }
         }
@@ -142,18 +149,18 @@ public class ApiVersion10 implements ApiVersion {
         try {
             response = m.handle();
         } catch (ApiErrorException e) {
-            Map<String, Object> resp = new HashMap<>();
-            resp.put("status", e.getStatus());
+            JSONObject resp = new JSONObject();
+            resp.put("status", ApiStatus.STATUS_API_ERROR);
             resp.put("message", "Api error: " + e.getMessage());
-            return new JSONObject(resp);
+            return resp;
         }
 
-        Map<String, Object> rr = new HashMap<>();
+        JSONObject rr = new JSONObject();
 
         rr.put("status", m.status);
         rr.put("message", m.message);
-        rr.put("result", new JSONObject(response));
+        rr.put("result", response);
 
-        return new JSONObject(rr);
+        return rr;
     }
 }

@@ -14,4 +14,7 @@ public class CmsVerifyModel extends ApiModel {
 
     @InputField
     public BooleanDataType checkCrl = new BooleanDataType();
+    
+    @InputField(required = true)
+    public BooleanDataType checkValidity = new BooleanDataType();
 }

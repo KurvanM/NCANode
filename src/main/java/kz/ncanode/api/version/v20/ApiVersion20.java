@@ -12,18 +12,18 @@ import org.json.simple.JSONObject;
 
 import java.net.HttpURLConnection;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Версия API 2.0
  */
 public class ApiVersion20 implements ApiVersion {
-    private final List<ApiController> controllers;
+    private ApiServiceProvider man;
+    private List<ApiController> controllers;
 
     public ApiVersion20(ApiServiceProvider man) {
         controllers = new ArrayList<>();
+        this.man = man;
         registerControllers();
 
         for (ApiController controller : controllers) {
@@ -40,41 +40,42 @@ public class ApiVersion20 implements ApiVersion {
 
     @Override
     public void setApiManager(ApiServiceProvider apiManager) {
+        man = apiManager;
     }
 
     @Override
     public JSONObject process(JSONObject request) {
         JSONObject response = new JSONObject();
 
-        String method;
+        String method = "";
 
         try {
             method = (String) request.get("method");
         } catch (ClassCastException e) {
-            Map<String, Object> resp = new HashMap<>();
+            JSONObject resp = new JSONObject();
             resp.put("status", ApiStatus.STATUS_INVALID_PARAMETER);
             resp.put("httpCode", HttpURLConnection.HTTP_BAD_REQUEST);
             resp.put("message", "Invalid parameter \"method\"");
-            return new JSONObject(resp);
+            return resp;
         }
 
         // Если метод пустой
         if (method == null || method.isEmpty()) {
-            Map<String, Object> resp = new HashMap<>();
+            JSONObject resp = new JSONObject();
             resp.put("status", ApiStatus.STATUS_METHOD_NOT_SPECIFIED);
             resp.put("httpCode", HttpURLConnection.HTTP_BAD_REQUEST);
             resp.put("message", "\"method\" not specified");
-            return new JSONObject(resp);
+            return resp;
         }
 
         ApiController controller = findController(method);
 
         if (controller == null || !controller.hasMethod(method)) {
-            Map<String, Object> resp = new HashMap<>();
+            JSONObject resp = new JSONObject();
             resp.put("status", ApiStatus.STATUS_METHOD_NOT_FOUND);
             resp.put("httpCode", HttpURLConnection.HTTP_BAD_REQUEST);
             resp.put("message", "Method not found");
-            return new JSONObject(resp);
+            return resp;
         }
 
         // Получаем параметры
@@ -83,11 +84,11 @@ public class ApiVersion20 implements ApiVersion {
         try {
             params = (JSONObject) request.get("params");
         } catch (ClassCastException e) {
-            Map<String, Object> resp = new HashMap<>();
+            JSONObject resp = new JSONObject();
             resp.put("status", ApiStatus.STATUS_INVALID_PARAMETER);
             resp.put("httpCode", HttpURLConnection.HTTP_BAD_REQUEST);
             resp.put("message", "Invalid parameter \"params\"");
-            return new JSONObject(resp);
+            return resp;
         }
 
         if (params == null) {
@@ -97,12 +98,12 @@ public class ApiVersion20 implements ApiVersion {
         try {
             controller.callMethod(method, params, response);
         } catch (ApiErrorException e) {
-            Map<String, Object> resp = new HashMap<>();
+            JSONObject resp = new JSONObject();
             resp.put("httpCode", e.getHttpCode());
-            resp.put("status", e.getStatus());
+            resp.put("status", ApiStatus.STATUS_API_ERROR);
             resp.put("message", "Api error: " + e.getMessage());
 
-            return new JSONObject(resp);
+            return resp;
         }
 
         return response;

@@ -16,9 +16,7 @@ import kz.ncanode.pki.PkiServiceProvider;
 import kz.ncanode.pki.TSPServiceProvider;
 import org.json.simple.JSONObject;
 
-import java.util.HashMap;
 import java.util.Hashtable;
-import java.util.Map;
 
 /**
  * Данный класс получает запрос на обработку API,
@@ -36,7 +34,7 @@ public class ApiServiceProvider implements ServiceProvider {
     public TSPServiceProvider tsp;
     public KalkanServiceProvider kalkan;
 
-    public Hashtable<String, ApiVersion> supportedVersions;
+    public Hashtable<String, ApiVersion> supportedVersions = null;
 
     public ApiServiceProvider(ConfigServiceProvider config, RequestLogServiceProvider req, ErrorLogServiceProvider err, PkiServiceProvider pki, CrlServiceProvider crl, CAStoreServiceProvider ca, InfoServiceProvider info, TSPServiceProvider tsp, KalkanServiceProvider kalkan)
     {
@@ -70,26 +68,26 @@ public class ApiServiceProvider implements ServiceProvider {
         try {
             apiVer = (String)request.get("version");
         } catch (ClassCastException e) {
-            Map<String, Object> resp = new HashMap<>();
+            JSONObject resp = new JSONObject();
             resp.put("status", ApiStatus.STATUS_INVALID_PARAMETER);
             resp.put("message", "Invalid parameter \"version\"");
-            return new JSONObject(resp);
+            return resp;
         }
 
         // Требуем указывать версию
         if (apiVer == null || apiVer.isEmpty()) {
-            Map<String, Object> resp = new HashMap<>();
+            JSONObject resp = new JSONObject();
             resp.put("status", ApiStatus.STATUS_VERSION_NOT_SPECIFIED);
             resp.put("message", "API version not specified");
-            return new JSONObject(resp);
+            return resp;
         }
 
         // Получаем нужную версию API
         if (!supportedVersions.containsKey(apiVer)) {
-            Map<String, Object> resp = new HashMap<>();
+            JSONObject resp = new JSONObject();
             resp.put("status", ApiStatus.STATUS_VERSION_NOT_SUPPORTED);
             resp.put("message", "API version not supported");
-            return new JSONObject(resp);
+            return resp;
         }
 
         ApiVersion ver = supportedVersions.get(apiVer);

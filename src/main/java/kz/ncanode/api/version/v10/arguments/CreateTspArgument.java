@@ -9,7 +9,7 @@ public class CreateTspArgument extends ApiArgument {
 
     ApiVersion ver;
     ApiServiceProvider man;
-    private final boolean required;
+    private boolean required = false;
     private boolean createTsp = false;
 
     public CreateTspArgument(boolean required, ApiVersion ver, ApiServiceProvider man) {

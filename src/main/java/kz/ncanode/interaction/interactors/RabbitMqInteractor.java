@@ -12,7 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeoutException;
 
 public class RabbitMqInteractor implements Interactor {
-    InteractionServiceProvider provider;
+    InteractionServiceProvider provider = null;
 
     public RabbitMqInteractor(InteractionServiceProvider provider) {
         this.provider = provider;
@@ -24,7 +24,7 @@ public class RabbitMqInteractor implements Interactor {
         // getting config
         String host      = provider.config.get("rabbitmq", "host");
         String queueName = provider.config.get("rabbitmq", "queue_name");
-        int port = Integer.parseInt(provider.config.get("rabbitmq", "port"));
+        int port = Integer.valueOf(provider.config.get("rabbitmq", "port"));
 
         // Creating connection
         ConnectionFactory cf = new ConnectionFactory();
@@ -34,9 +34,9 @@ public class RabbitMqInteractor implements Interactor {
         provider.out.write("Trying to connect AMQP server " + host + ":" + port + "...");
 
         // Creating queue
-        try (Connection conn = cf.newConnection();
-             Channel channel = conn.createChannel()){
-
+        try {
+            Connection conn = cf.newConnection();
+            Channel channel = conn.createChannel();
 
             provider.out.write("Listening queue:" + queueName);
             channel.queueDeclare(queueName, false, false, true, null);
@@ -83,7 +83,9 @@ public class RabbitMqInteractor implements Interactor {
             };
 
             channel.basicConsume(queueName, consumer);
-        } catch (IOException | TimeoutException e) {
+        } catch (IOException e) {
+            e.printStackTrace();
+        } catch (TimeoutException e) {
             e.printStackTrace();
         }
 

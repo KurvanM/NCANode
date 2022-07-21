@@ -10,7 +10,9 @@ import java.util.HashMap;
  */
 public class CmdServiceProvider implements ServiceProvider {
 
-    private final HashMap<String, String> arguments;
+    private final static char ARGUMENT_TOKEN='-';
+
+    private HashMap<String, String> arguments = null;
 
     enum ParseState {
         EXPECT_ARGUMENT_TOKEN,
@@ -44,8 +46,8 @@ public class CmdServiceProvider implements ServiceProvider {
     private static String[] parseArg(String argument) {
         ParseState state = ParseState.EXPECT_ARGUMENT_TOKEN;
 
-        StringBuilder argName  = new StringBuilder();
-        StringBuilder argValue = new StringBuilder();
+        String argName  = "";
+        String argValue = "";
 
         for (int i=0; i<argument.length(); ++i) {
             char c = argument.charAt(i);
@@ -64,20 +66,20 @@ public class CmdServiceProvider implements ServiceProvider {
                         continue;
                     }
 
-                    argName.append(c);
+                    argName += c;
                     break;
                 case EXPECT_ARGUMENT_VALUE:
-                    argValue.append(c);
+                    argValue +=c;
                     break;
             }
         }
 
-        argName = new StringBuilder(argName.toString().trim());
-        argValue = new StringBuilder(argValue.toString().trim());
+        argName  = argName.trim();
+        argValue = argValue.trim();
 
         String[] result = new String[2];
-        result[0] = argName.toString();
-        result[1] = argValue.toString();
+        result[0] = argName;
+        result[1] = argValue;
 
         return result;
     }

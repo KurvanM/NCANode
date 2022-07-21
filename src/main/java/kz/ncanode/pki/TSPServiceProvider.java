@@ -14,6 +14,9 @@ import kz.gov.pki.kalkan.tsp.*;
 import kz.ncanode.Helper;
 import kz.ncanode.config.ConfigServiceProvider;
 import kz.ncanode.ioc.ServiceProvider;
+import kz.ncanode.kalkan.KalkanServiceProvider;
+import kz.ncanode.log.ErrorLogServiceProvider;
+import kz.ncanode.log.OutLogServiceProvider;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -26,15 +29,19 @@ import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
 import java.security.cert.*;
 import java.util.Collection;
-import java.util.Hashtable;
 import java.util.Iterator;
-import java.util.Vector;
 
 public class TSPServiceProvider implements ServiceProvider {
-    private final ConfigServiceProvider config;
+    private ConfigServiceProvider   config = null;
+    private OutLogServiceProvider   out    = null;
+    private ErrorLogServiceProvider err    = null;
+    private KalkanServiceProvider   kalkan = null;
 
-    public TSPServiceProvider(ConfigServiceProvider config) {
+    public TSPServiceProvider(ConfigServiceProvider config, OutLogServiceProvider out, ErrorLogServiceProvider err, KalkanServiceProvider kalkan, CrlServiceProvider crl) {
         this.config = config;
+        this.out    = out;
+        this.err    = err;
+        this.kalkan = kalkan;
     }
 
     public TimeStampToken createTSP(byte[] data, String hashAlg, String reqPolicy) throws NoSuchProviderException, NoSuchAlgorithmException, IOException, TSPException {
@@ -51,27 +58,26 @@ public class TSPServiceProvider implements ServiceProvider {
         BigInteger nonce = BigInteger.valueOf(System.currentTimeMillis());
         TimeStampRequest request = reqGen.generate(hashAlg, hash, nonce);
         byte[] reqData = request.getEncoded();
+
+        // Create url
         String configTspUrl = config.get("pki", "tsp_url");
+        URL tspUrl = new URL(configTspUrl);
 
-        // выполняем запрос к http://tsp.pki.gov.kz с ретраями,
-        // потому что иногда он отвечает медленно или с ошибками.
-        int retries = 0;
-        int maxRetries = 2;
-        IOException lastException = null;
+        // Make request
+        HttpURLConnection con = (HttpURLConnection) tspUrl.openConnection();
+        con.setRequestMethod("POST");
+        con.setDoOutput(true);
+        con.setRequestProperty("Content-Type", "application/timestamp-query");
+        OutputStream reqStream = con.getOutputStream();
+        reqStream.write(reqData);
+        reqStream.close();
 
-        while (retries < maxRetries) {
-            try {
-                TimeStampResponse response = new TimeStampResponse(requestTsp(configTspUrl, reqData));
-                response.validate(request);
+        // Get response
+        InputStream respStream = con.getInputStream();
+        TimeStampResponse response = new TimeStampResponse(respStream);
+        response.validate(request);
 
-                return response.getTimeStampToken();
-            } catch (IOException e) {
-                lastException = e;
-                retries++;
-            }
-        }
-
-        throw lastException;
+        return response.getTimeStampToken();
     }
 
     public TimeStampTokenInfo verifyTSP(CMSSignedData data) throws NoSuchAlgorithmException, NoSuchProviderException, CMSException, IOException, TSPException, CertStoreException, CertificateNotYetValidException, CertificateExpiredException {
@@ -107,62 +113,8 @@ public class TSPServiceProvider implements ServiceProvider {
         byte[] ts = tsp.getEncoded();
         ASN1Encodable signatureTimeStamp = new Attribute(PKCSObjectIdentifiers.id_aa_signatureTimeStampToken, new DERSet(Helper.byteToASN1(ts)));
         vector.add(signatureTimeStamp);
+        SignerInformation newSigner = SignerInformation.replaceUnsignedAttributes(signer, new AttributeTable(vector));
 
-        return SignerInformation.replaceUnsignedAttributes(signer, new AttributeTable(vector));
-    }
-
-    /**
-     * Возвращает TSP атрибуты подписи
-     */
-    public Vector<Attribute> getSignerTspAttributes(SignerInformation signer) {
-        Vector<Attribute> tspAttrs = new Vector<>();
-
-        if (signer.getUnsignedAttributes() == null) {
-            return tspAttrs;
-        }
-
-        Hashtable<?,?> attrs = signer.getUnsignedAttributes().toHashtable();
-
-        if (attrs == null || !attrs.containsKey(PKCSObjectIdentifiers.id_aa_signatureTimeStampToken)) {
-            return tspAttrs;
-        }
-
-        // в подписи может быть один или несколько tsp атрибутов
-        Object attrOrAttrs = attrs.get(PKCSObjectIdentifiers.id_aa_signatureTimeStampToken);
-
-        if (attrOrAttrs instanceof Attribute) {
-            tspAttrs.add((Attribute) attrOrAttrs);
-        } else {
-            tspAttrs = (Vector<Attribute>) attrOrAttrs;
-        }
-
-        return tspAttrs;
-    }
-
-    /**
-     * Есть ли у подписи метка TSP
-     */
-    public boolean signerHasTsp(SignerInformation signer) {
-        return !getSignerTspAttributes(signer).isEmpty();
-    }
-
-    /**
-     * Выполняет запрос к сервису TSP
-     */
-    protected InputStream requestTsp(String url, byte[] request) throws IOException {
-        URL tspUrl = new URL(url);
-        HttpURLConnection con = (HttpURLConnection) tspUrl.openConnection();
-        // connection timeout: 1 second
-        con.setConnectTimeout(1000);
-        // read timeout: 3 seconds
-        con.setReadTimeout(3000);
-        con.setRequestMethod("POST");
-        con.setDoOutput(true);
-        con.setRequestProperty("Content-Type", "application/timestamp-query");
-        OutputStream reqStream = con.getOutputStream();
-        reqStream.write(request);
-        reqStream.close();
-
-        return con.getInputStream();
+        return newSigner;
     }
 }

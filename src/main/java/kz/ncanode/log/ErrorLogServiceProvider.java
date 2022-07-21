@@ -14,15 +14,16 @@ import java.io.FileOutputStream;
  */
 public class ErrorLogServiceProvider extends Log implements ServiceProvider {
 
-    OutLogServiceProvider out;
-    ConfigServiceProvider config;
+    OutLogServiceProvider out = null;
+    ConfigServiceProvider config = null;
+
+    private String errorLogFile = "";
 
     public ErrorLogServiceProvider(ConfigServiceProvider config, OutLogServiceProvider out) {
 
         this.out = out;
         this.config = config;
 
-        String errorLogFile = "";
         try {
             errorLogFile = this.config.get("log", "error_log");
 

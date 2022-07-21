@@ -50,19 +50,19 @@ public class RAWSign extends ApiMethod {
         PrivateKey privateKey = (PrivateKey) p12.getKey(alias, password.toCharArray());
 
         // get certificate
-        X509Certificate cert;
+        X509Certificate cert = null;
         cert = (X509Certificate) p12.getCertificate(alias);
 
         CMSSignedDataGenerator gen = new CMSSignedDataGenerator();
 
-        Signature sig;
+        Signature sig = null;
         sig = Signature.getInstance(cert.getSigAlgName(), man.kalkan.get());
         sig.initSign(privateKey);
         sig.update(raw);
 
 
         CMSProcessableByteArray cmsData = new CMSProcessableByteArray(raw);
-        CertStore chainStore = CertStore.getInstance("Collection", new CollectionCertStoreParameters(Collections.singletonList(cert)),man.kalkan.get().getName());
+        CertStore chainStore = CertStore.getInstance("Collection", new CollectionCertStoreParameters(Arrays.asList(cert)),man.kalkan.get().getName());
         gen.addSigner(privateKey, cert, Helper.getDigestAlgorithmOidBYSignAlgorithmOid(cert.getSigAlgOID()));
         gen.addCertificatesAndCRLs(chainStore);
 
@@ -89,11 +89,11 @@ public class RAWSign extends ApiMethod {
             } else {
                 SignerInformationStore signerStore = signed.getSignerInfos();
 
-                List<SignerInformation> newSigners = new ArrayList<>();
+                List<SignerInformation> newSigners = new ArrayList<SignerInformation>();
 
-                for (Object signer : signerStore.getSigners())
+                for (SignerInformation signer : (Collection<SignerInformation>)signerStore.getSigners())
                 {
-                    newSigners.add(man.tsp.addTspToSigner((SignerInformation) signer, cert, useTsaPolicy));
+                    newSigners.add(man.tsp.addTspToSigner(signer, cert, useTsaPolicy));
                 }
 
                 signed = CMSSignedData.replaceSigners(signed, new SignerInformationStore(newSigners));
